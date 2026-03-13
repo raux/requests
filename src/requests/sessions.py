@@ -58,6 +58,11 @@ if sys.platform == "win32":
 else:
     preferred_clock = time.time
 
+# Refactoring: Replace Magic Numbers with Named Constants
+DEFAULT_HTTP_PORT = 80
+DEFAULT_HTTPS_PORT = 443
+REDIRECT_STRIP_HEADERS = ("Content-Length", "Content-Type", "Transfer-Encoding")
+
 
 def merge_setting(request_setting, session_setting, dict_class=OrderedDict):
     """Determines appropriate setting for a given request, taking into account
@@ -137,9 +142,9 @@ class SessionRedirectMixin:
         # that allowed any redirects on the same host.
         if (
             old_parsed.scheme == "http"
-            and old_parsed.port in (80, None)
+            and old_parsed.port in (DEFAULT_HTTP_PORT, None)  # Refactoring: Replace Magic Number
             and new_parsed.scheme == "https"
-            and new_parsed.port in (443, None)
+            and new_parsed.port in (DEFAULT_HTTPS_PORT, None)  # Refactoring: Replace Magic Number
         ):
             return False
 
@@ -156,6 +161,57 @@ class SessionRedirectMixin:
 
         # Standard case: root URI must match
         return changed_port or changed_scheme
+
+    def _normalize_redirect_url(self, url, resp_url, previous_fragment):
+        """Normalize a redirect URL: handle scheme-less URLs, fragments, and
+        relative paths.  Refactoring: Extract Method"""
+        # Handle redirection without scheme (see: RFC 1808 Section 4)
+        if url.startswith("//"):
+            parsed_rurl = urlparse(resp_url)
+            url = ":".join([to_native_string(parsed_rurl.scheme), url])
+
+        # Normalize url case and attach previous fragment if needed (RFC 7231 7.1.2)
+        parsed = urlparse(url)
+        if parsed.fragment == "" and previous_fragment:
+            parsed = parsed._replace(fragment=previous_fragment)
+        elif parsed.fragment:
+            previous_fragment = parsed.fragment
+        url = parsed.geturl()
+
+        # Facilitate relative 'location' headers, as allowed by RFC 7231.
+        # (e.g. '/path/to/resource' instead of 'http://domain.tld/path/to/resource')
+        # Compliant with RFC3986, we percent encode the url.
+        if not parsed.netloc:
+            url = urljoin(resp_url, requote_uri(url))
+        else:
+            url = requote_uri(url)
+
+        return to_native_string(url), previous_fragment
+
+    def _clean_headers_for_redirect(self, prepared_request, resp):
+        """Remove headers that should not be forwarded on redirect.
+        Refactoring: Extract Method"""
+        # https://github.com/psf/requests/issues/1084
+        if resp.status_code not in (
+            codes.temporary_redirect,
+            codes.permanent_redirect,
+        ):
+            # https://github.com/psf/requests/issues/3490
+            for header in REDIRECT_STRIP_HEADERS:  # Refactoring: Replace Magic Number
+                prepared_request.headers.pop(header, None)
+            prepared_request.body = None
+
+        prepared_request.headers.pop("Cookie", None)
+
+    def _prepare_cookies_for_redirect(self, prepared_request, req, resp):
+        """Extract, merge, and prepare cookies for a redirect request.
+        Refactoring: Extract Method"""
+        # Extract any cookies sent on the response to the cookiejar
+        # in the new request. Because we've mutated our copied prepared
+        # request, use the old one that we haven't yet touched.
+        extract_cookies_to_jar(prepared_request._cookies, req, resp.raw)
+        merge_cookies(prepared_request._cookies, self.cookies)
+        prepared_request.prepare_cookies(prepared_request._cookies)
 
     def resolve_redirects(
         self,
@@ -196,51 +252,17 @@ class SessionRedirectMixin:
             # Release the connection back into the pool.
             resp.close()
 
-            # Handle redirection without scheme (see: RFC 1808 Section 4)
-            if url.startswith("//"):
-                parsed_rurl = urlparse(resp.url)
-                url = ":".join([to_native_string(parsed_rurl.scheme), url])
+            url, previous_fragment = self._normalize_redirect_url(  # Refactoring: Extract Method
+                url, resp.url, previous_fragment
+            )
 
-            # Normalize url case and attach previous fragment if needed (RFC 7231 7.1.2)
-            parsed = urlparse(url)
-            if parsed.fragment == "" and previous_fragment:
-                parsed = parsed._replace(fragment=previous_fragment)
-            elif parsed.fragment:
-                previous_fragment = parsed.fragment
-            url = parsed.geturl()
-
-            # Facilitate relative 'location' headers, as allowed by RFC 7231.
-            # (e.g. '/path/to/resource' instead of 'http://domain.tld/path/to/resource')
-            # Compliant with RFC3986, we percent encode the url.
-            if not parsed.netloc:
-                url = urljoin(resp.url, requote_uri(url))
-            else:
-                url = requote_uri(url)
-
-            prepared_request.url = to_native_string(url)
+            prepared_request.url = url
 
             self.rebuild_method(prepared_request, resp)
 
-            # https://github.com/psf/requests/issues/1084
-            if resp.status_code not in (
-                codes.temporary_redirect,
-                codes.permanent_redirect,
-            ):
-                # https://github.com/psf/requests/issues/3490
-                purged_headers = ("Content-Length", "Content-Type", "Transfer-Encoding")
-                for header in purged_headers:
-                    prepared_request.headers.pop(header, None)
-                prepared_request.body = None
+            self._clean_headers_for_redirect(prepared_request, resp)  # Refactoring: Extract Method
 
-            headers = prepared_request.headers
-            headers.pop("Cookie", None)
-
-            # Extract any cookies sent on the response to the cookiejar
-            # in the new request. Because we've mutated our copied prepared
-            # request, use the old one that we haven't yet touched.
-            extract_cookies_to_jar(prepared_request._cookies, req, resp.raw)
-            merge_cookies(prepared_request._cookies, self.cookies)
-            prepared_request.prepare_cookies(prepared_request._cookies)
+            self._prepare_cookies_for_redirect(prepared_request, req, resp)  # Refactoring: Extract Method
 
             # Rebuild auth and proxy information.
             proxies = self.rebuild_proxies(prepared_request, proxies)
@@ -250,7 +272,8 @@ class SessionRedirectMixin:
             # value ensures `rewindable` will be True, allowing us to raise an
             # UnrewindableBodyError, instead of hanging the connection.
             rewindable = prepared_request._body_position is not None and (
-                "Content-Length" in headers or "Transfer-Encoding" in headers
+                "Content-Length" in prepared_request.headers
+                or "Transfer-Encoding" in prepared_request.headers
             )
 
             # Attempt to rewind consumed file-like object.

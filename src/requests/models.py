@@ -82,6 +82,13 @@ DEFAULT_REDIRECT_LIMIT = 30
 CONTENT_CHUNK_SIZE = 10 * 1024
 ITER_CHUNK_SIZE = 512
 
+# Refactoring: Replace Magic Numbers with Named Constants
+DEFAULT_ENCODING = "utf-8"
+FALLBACK_ENCODING = "iso-8859-1"
+HTTP_CLIENT_ERROR_MIN = 400
+HTTP_SERVER_ERROR_MIN = 500
+HTTP_STATUS_MAX = 600
+
 
 class RequestEncodingMixin:
     @property
@@ -1008,18 +1015,18 @@ class Response:
             # isn't utf-8, we fall back to iso-8859-1 for all other
             # encodings. (See PR #3538)
             try:
-                reason = self.reason.decode("utf-8")
+                reason = self.reason.decode(DEFAULT_ENCODING)  # Refactoring: Replace Magic Number
             except UnicodeDecodeError:
-                reason = self.reason.decode("iso-8859-1")
+                reason = self.reason.decode(FALLBACK_ENCODING)  # Refactoring: Replace Magic Number
         else:
             reason = self.reason
 
-        if 400 <= self.status_code < 500:
+        if HTTP_CLIENT_ERROR_MIN <= self.status_code < HTTP_SERVER_ERROR_MIN:  # Refactoring: Replace Magic Number
             http_error_msg = (
                 f"{self.status_code} Client Error: {reason} for url: {self.url}"
             )
 
-        elif 500 <= self.status_code < 600:
+        elif HTTP_SERVER_ERROR_MIN <= self.status_code < HTTP_STATUS_MAX:  # Refactoring: Replace Magic Number
             http_error_msg = (
                 f"{self.status_code} Server Error: {reason} for url: {self.url}"
             )

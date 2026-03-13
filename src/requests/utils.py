@@ -597,7 +597,7 @@ def get_unicode_from_response(r):
         DeprecationWarning,
     )
 
-    tried_encodings = []
+    # Refactoring: Remove Dead Code — removed unused `tried_encodings` variable
 
     # Try charset from content-type
     encoding = get_encoding_from_headers(r.headers)
@@ -606,7 +606,7 @@ def get_unicode_from_response(r):
         try:
             return str(r.content, encoding)
         except UnicodeError:
-            tried_encodings.append(encoding)
+            pass
 
     # Fall back:
     try:
