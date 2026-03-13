@@ -422,6 +422,17 @@ class HTTPAdapter(BaseAdapter):
         """
         return _urllib3_request_context(request, verify, cert, self.poolmanager)
 
+    @staticmethod
+    def _validate_proxy_url(proxy_url):
+        """Validate that a parsed proxy URL has a host.
+        Refactoring: Remove Duplicated Code — extracted from
+        get_connection_with_tls_context and get_connection"""
+        if not proxy_url.host:
+            raise InvalidProxyURL(
+                "Please check proxy URL. It is malformed "
+                "and could be missing the host."
+            )
+
     def get_connection_with_tls_context(self, request, verify, proxies=None, cert=None):
         """Returns a urllib3 connection for the given request and TLS settings.
         This should not be called from user code, and is only exposed for use
@@ -454,11 +465,7 @@ class HTTPAdapter(BaseAdapter):
         if proxy:
             proxy = prepend_scheme_if_needed(proxy, "http")
             proxy_url = parse_url(proxy)
-            if not proxy_url.host:
-                raise InvalidProxyURL(
-                    "Please check proxy URL. It is malformed "
-                    "and could be missing the host."
-                )
+            self._validate_proxy_url(proxy_url)  # Refactoring: Remove Duplicated Code
             proxy_manager = self.proxy_manager_for(proxy)
             conn = proxy_manager.connection_from_host(
                 **host_params, pool_kwargs=pool_kwargs
@@ -497,11 +504,7 @@ class HTTPAdapter(BaseAdapter):
         if proxy:
             proxy = prepend_scheme_if_needed(proxy, "http")
             proxy_url = parse_url(proxy)
-            if not proxy_url.host:
-                raise InvalidProxyURL(
-                    "Please check proxy URL. It is malformed "
-                    "and could be missing the host."
-                )
+            self._validate_proxy_url(proxy_url)  # Refactoring: Remove Duplicated Code
             proxy_manager = self.proxy_manager_for(proxy)
             conn = proxy_manager.connection_from_url(url)
         else:
@@ -637,9 +640,7 @@ class HTTPAdapter(BaseAdapter):
                     f"Invalid timeout {timeout}. Pass a (connect, read) timeout tuple, "
                     f"or a single float to set both timeouts to the same value."
                 )
-        elif isinstance(timeout, TimeoutSauce):
-            pass
-        else:
+        elif not isinstance(timeout, TimeoutSauce):  # Refactoring: Remove Dead Code — removed no-op branch
             timeout = TimeoutSauce(connect=timeout, read=timeout)
 
         try:

@@ -22,6 +22,21 @@ CONTENT_TYPE_FORM_URLENCODED = "application/x-www-form-urlencoded"
 CONTENT_TYPE_MULTI_PART = "multipart/form-data"
 
 
+def _ensure_string_credential(value, param_name):
+    """Ensure a credential value is a string, emitting a deprecation warning
+    if not.  Refactoring: Remove Duplicated Code"""
+    if not isinstance(value, basestring):
+        warnings.warn(
+            f"Non-string {param_name}s will no longer be supported in Requests "
+            f"3.0.0. Please convert the object you've passed in ({value!r}) to "
+            "a string or bytes object in the near future to avoid "
+            "problems.",
+            category=DeprecationWarning,
+        )
+        value = str(value)
+    return value
+
+
 def _basic_auth_str(username, password):
     """Returns a Basic Auth string."""
 
@@ -32,25 +47,8 @@ def _basic_auth_str(username, password):
     #
     # These are here solely to maintain backwards compatibility
     # for things like ints. This will be removed in 3.0.0.
-    if not isinstance(username, basestring):
-        warnings.warn(
-            "Non-string usernames will no longer be supported in Requests "
-            f"3.0.0. Please convert the object you've passed in ({username!r}) to "
-            "a string or bytes object in the near future to avoid "
-            "problems.",
-            category=DeprecationWarning,
-        )
-        username = str(username)
-
-    if not isinstance(password, basestring):
-        warnings.warn(
-            "Non-string passwords will no longer be supported in Requests "
-            f"3.0.0. Please convert the object you've passed in ({type(password)!r}) to "
-            "a string or bytes object in the near future to avoid "
-            "problems.",
-            category=DeprecationWarning,
-        )
-        password = str(password)
+    username = _ensure_string_credential(username, "username")  # Refactoring: Remove Duplicated Code
+    password = _ensure_string_credential(password, "password")  # Refactoring: Remove Duplicated Code
     # -- End Removal --
 
     if isinstance(username, str):
@@ -139,39 +137,29 @@ class HTTPDigestAuth(AuthBase):
             _algorithm = "MD5"
         else:
             _algorithm = algorithm.upper()
-        # lambdas assume digest modules are imported at the top level
-        if _algorithm == "MD5" or _algorithm == "MD5-SESS":
 
-            def md5_utf8(x):
+        # Refactoring: Simplify Conditional Expression — replaced if/elif chain
+        # with dictionary mapping for algorithm selection
+        _HASH_ALGORITHMS = {
+            "MD5": hashlib.md5,
+            "MD5-SESS": hashlib.md5,
+            "SHA": hashlib.sha1,
+            "SHA-256": hashlib.sha256,
+            "SHA-512": hashlib.sha512,
+        }
+
+        # Refactoring: Remove Duplicated Code — replaced four near-identical
+        # hash helper functions with a single factory
+        def _make_hash_utf8(hash_func):
+            def hasher(x):
                 if isinstance(x, str):
                     x = x.encode("utf-8")
-                return hashlib.md5(x).hexdigest()
+                return hash_func(x).hexdigest()
+            return hasher
 
-            hash_utf8 = md5_utf8
-        elif _algorithm == "SHA":
-
-            def sha_utf8(x):
-                if isinstance(x, str):
-                    x = x.encode("utf-8")
-                return hashlib.sha1(x).hexdigest()
-
-            hash_utf8 = sha_utf8
-        elif _algorithm == "SHA-256":
-
-            def sha256_utf8(x):
-                if isinstance(x, str):
-                    x = x.encode("utf-8")
-                return hashlib.sha256(x).hexdigest()
-
-            hash_utf8 = sha256_utf8
-        elif _algorithm == "SHA-512":
-
-            def sha512_utf8(x):
-                if isinstance(x, str):
-                    x = x.encode("utf-8")
-                return hashlib.sha512(x).hexdigest()
-
-            hash_utf8 = sha512_utf8
+        _hash_func = _HASH_ALGORITHMS.get(_algorithm)
+        if _hash_func is not None:
+            hash_utf8 = _make_hash_utf8(_hash_func)
 
         KD = lambda s, d: hash_utf8(f"{s}:{d}")  # noqa:E731
 

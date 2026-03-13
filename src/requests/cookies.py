@@ -118,7 +118,7 @@ class MockResponse:
         return self._headers
 
     def getheaders(self, name):
-        self._headers.getheaders(name)
+        return self._headers.getheaders(name)  # Refactoring: Remove Dead Code — added missing return
 
 
 def extract_cookies_to_jar(jar, request, response):
@@ -274,21 +274,23 @@ class RequestsCookieJar(cookielib.CookieJar, MutableMapping):
         """
         return list(self.iteritems())
 
+    def _collect_cookie_attrs(self, attr_name):
+        """Collect unique cookie attribute values.
+        Refactoring: Remove Duplicated Code — extracted from list_domains/list_paths"""
+        values = []
+        for cookie in iter(self):
+            value = getattr(cookie, attr_name)
+            if value not in values:
+                values.append(value)
+        return values
+
     def list_domains(self):
         """Utility method to list all the domains in the jar."""
-        domains = []
-        for cookie in iter(self):
-            if cookie.domain not in domains:
-                domains.append(cookie.domain)
-        return domains
+        return self._collect_cookie_attrs("domain")  # Refactoring: Remove Duplicated Code
 
     def list_paths(self):
         """Utility method to list all the paths in the jar."""
-        paths = []
-        for cookie in iter(self):
-            if cookie.path not in paths:
-                paths.append(cookie.path)
-        return paths
+        return self._collect_cookie_attrs("path")  # Refactoring: Remove Duplicated Code
 
     def multiple_domains(self):
         """Returns True if there are multiple domains in the jar.
@@ -363,6 +365,15 @@ class RequestsCookieJar(cookielib.CookieJar, MutableMapping):
         else:
             super().update(other)
 
+    def _matching_cookies(self, name, domain=None, path=None):
+        """Yield cookies matching the given name, domain, and path criteria.
+        Refactoring: Remove Duplicated Code — extracted from _find/_find_no_duplicates"""
+        for cookie in iter(self):
+            if cookie.name == name:
+                if domain is None or cookie.domain == domain:
+                    if path is None or cookie.path == path:
+                        yield cookie
+
     def _find(self, name, domain=None, path=None):
         """Requests uses this method internally to get cookie values.
 
@@ -375,11 +386,8 @@ class RequestsCookieJar(cookielib.CookieJar, MutableMapping):
         :param path: (optional) string containing path of cookie
         :return: cookie.value
         """
-        for cookie in iter(self):
-            if cookie.name == name:
-                if domain is None or cookie.domain == domain:
-                    if path is None or cookie.path == path:
-                        return cookie.value
+        for cookie in self._matching_cookies(name, domain, path):  # Refactoring: Remove Duplicated Code
+            return cookie.value
 
         raise KeyError(f"name={name!r}, domain={domain!r}, path={path!r}")
 
@@ -396,17 +404,14 @@ class RequestsCookieJar(cookielib.CookieJar, MutableMapping):
         :return: cookie.value
         """
         toReturn = None
-        for cookie in iter(self):
-            if cookie.name == name:
-                if domain is None or cookie.domain == domain:
-                    if path is None or cookie.path == path:
-                        if toReturn is not None:
-                            # if there are multiple cookies that meet passed in criteria
-                            raise CookieConflictError(
-                                f"There are multiple cookies with name, {name!r}"
-                            )
-                        # we will eventually return this as long as no cookie conflict
-                        toReturn = cookie.value
+        for cookie in self._matching_cookies(name, domain, path):  # Refactoring: Remove Duplicated Code
+            if toReturn is not None:
+                # if there are multiple cookies that meet passed in criteria
+                raise CookieConflictError(
+                    f"There are multiple cookies with name, {name!r}"
+                )
+            # we will eventually return this as long as no cookie conflict
+            toReturn = cookie.value
 
         if toReturn:
             return toReturn
