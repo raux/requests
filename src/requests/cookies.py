@@ -274,7 +274,7 @@ class RequestsCookieJar(cookielib.CookieJar, MutableMapping):
         """
         return list(self.iteritems())
 
-    def _collect_cookie_attrs(self, attr_name):
+    def _collect_cookie_attributes(self, attr_name):
         """Collect unique cookie attribute values.
         Refactoring: Remove Duplicated Code — extracted from list_domains/list_paths"""
         values = []
@@ -286,11 +286,11 @@ class RequestsCookieJar(cookielib.CookieJar, MutableMapping):
 
     def list_domains(self):
         """Utility method to list all the domains in the jar."""
-        return self._collect_cookie_attrs("domain")  # Refactoring: Remove Duplicated Code
+        return self._collect_cookie_attributes("domain")  # Refactoring: Remove Duplicated Code
 
     def list_paths(self):
         """Utility method to list all the paths in the jar."""
-        return self._collect_cookie_attrs("path")  # Refactoring: Remove Duplicated Code
+        return self._collect_cookie_attributes("path")  # Refactoring: Remove Duplicated Code
 
     def multiple_domains(self):
         """Returns True if there are multiple domains in the jar.

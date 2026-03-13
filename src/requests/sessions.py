@@ -271,9 +271,9 @@ class SessionRedirectMixin:
             # A failed tell() sets `_body_position` to `object()`. This non-None
             # value ensures `rewindable` will be True, allowing us to raise an
             # UnrewindableBodyError, instead of hanging the connection.
-            headers = prepared_request.headers
             rewindable = prepared_request._body_position is not None and (
-                "Content-Length" in headers or "Transfer-Encoding" in headers
+                "Content-Length" in prepared_request.headers
+                or "Transfer-Encoding" in prepared_request.headers
             )
 
             # Attempt to rewind consumed file-like object.
