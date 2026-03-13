@@ -187,7 +187,7 @@ Hardcoded numeric and string literals reduce readability and make maintenance ha
 | Line(s) | Value | Suggested Constant |
 |---------|-------|--------------------|
 | 199 | `"08x"` | `NONCE_COUNT_FORMAT` |
-| 205 | `[:16]` | `CNONCE_LENGTH` |
+| 205 | `16` (used as `[:16]`) | `CNONCE_LENGTH` |
 | 260 | `< 2` | `MAX_DIGEST_AUTH_RETRIES` |
 
 ### 2.6 `utils.py` — Network and BOM Constants
@@ -196,7 +196,7 @@ Hardcoded numeric and string literals reduce readability and make maintenance ha
 |---------|-------|--------------------|
 | 692 | `0xFFFFFFFF` | `IPV4_NETMASK_MAX` |
 | 692, 719 | `32` | `IPV4_BITS` |
-| 943 | `[:4]` | `UTF_BOM_SAMPLE_SIZE` |
+| 943 | `4` (used as `[:4]`) | `UTF_BOM_SAMPLE_SIZE` |
 
 ---
 
@@ -446,7 +446,10 @@ and `_find_no_duplicates()` all iterate over cookies with similar patterns.
 
 Code that is unreachable, unused, or produces no effect.
 
-### 7.1 `cookies.py` — `MockResponse.getheaders()` Missing Return (Line 120–121)
+### 7.1 `cookies.py` — `MockResponse.getheaders()` Missing Return
+
+In the `MockResponse` class, the `getheaders()` method calls
+`self._headers.getheaders(name)` but does not return the result:
 
 ```python
 def getheaders(self, name):
